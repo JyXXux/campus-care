@@ -103,6 +103,38 @@ TIME_SLOTS_POOL = [
 WORKLOAD_LEVELS = ["Low", "Moderate", "Heavy"]
 MILESTONE_STATUS = ["On Track", "At Risk", "Completed"]
 
+# Default text for the Parent / public tab (editable by staff in-app;
+# the DB copy overrides these once a staff member saves changes).
+CONTENT_DEFAULTS = {
+    "burnout_intro": (
+        "**What is burnout?**\n\n"
+        "Long-term stress that has not wound down. It is different from a "
+        "tough exam week - it lasts for weeks and affects energy, "
+        "motivation and health. The sections below give parents practical, "
+        "evidence-based guidance."),
+    "burnout_signs": (
+        "1. Grades or attendance dropping sharply\n"
+        "2. Withdrawing from friends and group activities\n"
+        "3. Trouble sleeping or sleeping all weekend\n"
+        "4. Repeated physical complaints (headaches, stomach ache)\n"
+        "5. Irritability, or giving up on assignments early"),
+    "burnout_help": (
+        "- Keep check-ins short and judgment-free ('how's the workload "
+        "feeling this week?')\n"
+        "- Encourage one hobby that has nothing to do with grades\n"
+        "- Help them protect sleep and meals around exam season\n"
+        "- Normalise asking for help - it is strength, not weakness\n"
+        "- Contact the department when patterns persist for 2+ weeks"),
+    "burnout_contacts": (
+        "| Resource | Details |\n"
+        "|---|---|\n"
+        "| Student Counselling Cell | Room 201, Admin Block - Mon to Fri, "
+        "10 am - 4 pm |\n"
+        "| Faculty Wellness Officer | One designated staff per department |\n"
+        "| Emergency / Helpline | Placeholder: 1800-XXX-XXXX |\n"
+        "| Student Affairs Office | studentaffairs@sit.edu.in |"),
+}
+
 # Demo accounts (the one-click login buttons)
 DEMO_ACCOUNTS = {
     "Demo Student": {
@@ -133,6 +165,8 @@ class DB:
         self.conn = sqlite3.connect(path, check_same_thread=False)
         self.conn.row_factory = sqlite3.Row
         self.create_tables()
+        self.migrate()
+        self.ensure_content_defaults()
         if AUTO_SEED_DEMO:
             self.seed_demo_data()
 
@@ -182,7 +216,8 @@ class DB:
                 deadline          TEXT NOT NULL,
                 workload_feedback TEXT,
                 status            TEXT NOT NULL,
-                created_at        TEXT NOT NULL
+                created_at        TEXT NOT NULL,
+                approved          INTEGER NOT NULL DEFAULT 0
             )
         """)
         self.run("""
@@ -239,6 +274,38 @@ class DB:
                 value TEXT
             )
         """)
+        self.run("""
+            CREATE TABLE IF NOT EXISTS notices (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                title       TEXT NOT NULL,
+                body        TEXT,
+                department  TEXT NOT NULL,
+                posted_on   TEXT NOT NULL,
+                created_by  TEXT,
+                visible     INTEGER NOT NULL DEFAULT 1
+            )
+        """)
+        self.run("""
+            CREATE TABLE IF NOT EXISTS site_content (
+                key   TEXT PRIMARY KEY,
+                value TEXT NOT NULL
+            )
+        """)
+
+    def migrate(self):
+        cols = [r["name"] for r in
+                self.fetch("PRAGMA table_info(milestones)")]
+        if "approved" not in cols:
+            self.run(
+                "ALTER TABLE milestones "
+                "ADD COLUMN approved INTEGER NOT NULL DEFAULT 0")
+
+    def ensure_content_defaults(self):
+        for key, value in CONTENT_DEFAULTS.items():
+            self.conn.execute(
+                "INSERT OR IGNORE INTO site_content (key, value) "
+                "VALUES (?, ?)", (key, value))
+        self.conn.commit()
 
     # 2.3 time helpers
     @staticmethod
@@ -284,18 +351,25 @@ class DB:
 
     # 2.6 milestones
     def add_milestone(self, department, project_name, milestone_title,
-                      deadline, workload_feedback, status):
+                      deadline, workload_feedback, status, approved=0):
         self.run(
             """INSERT INTO milestones
                (department, project_name, milestone_title, deadline,
-                workload_feedback, status, created_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                workload_feedback, status, created_at, approved)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
             (department, project_name, milestone_title, deadline,
-             workload_feedback, status, self.now_iso()),
+             workload_feedback, status, self.now_iso(), approved),
         )
 
     def get_milestones(self):
         return self.fetch("SELECT * FROM milestones ORDER BY deadline ASC, id DESC")
+
+    def set_milestone_approved(self, milestone_id, approved=1):
+        self.run("UPDATE milestones SET approved = ? WHERE id = ?",
+                 (approved, milestone_id))
+
+    def delete_milestone(self, milestone_id):
+        self.run("DELETE FROM milestones WHERE id = ?", (milestone_id,))
 
     # 2.7 grievances + tamper-evident audit chain
     def next_ticket_no(self):
@@ -424,6 +498,60 @@ class DB:
         return self.fetch(
             "SELECT * FROM academic_deadlines ORDER BY due_date ASC")
 
+    def update_deadline(self, deadline_id, title, department, due_date,
+                        description, status):
+        self.run(
+            """UPDATE academic_deadlines
+               SET title = ?, department = ?, due_date = ?, description = ?,
+                   status = ?
+               WHERE id = ?""",
+            (title, department, due_date, description, status, deadline_id),
+        )
+
+    def delete_deadline(self, deadline_id):
+        self.run("DELETE FROM academic_deadlines WHERE id = ?",
+                 (deadline_id,))
+
+    # 2.9b notices (parent / public announcements)
+    def add_notice(self, title, body, department, visible=1,
+                   created_by="SIT Admin"):
+        self.run(
+            """INSERT INTO notices
+               (title, body, department, posted_on, created_by, visible)
+               VALUES (?, ?, ?, ?, ?, ?)""",
+            (title, body, department, self.now_iso(), created_by, visible),
+        )
+
+    def get_notices(self, visible_only=True):
+        sql = ("SELECT * FROM notices WHERE visible = 1 "
+               "ORDER BY posted_on DESC, id DESC" if visible_only
+               else "SELECT * FROM notices ORDER BY posted_on DESC, id DESC")
+        return self.fetch(sql)
+
+    def update_notice(self, notice_id, title, body, department, visible):
+        self.run(
+            """UPDATE notices
+               SET title = ?, body = ?, department = ?, visible = ?
+               WHERE id = ?""",
+            (title, body, department, visible, notice_id),
+        )
+
+    def delete_notice(self, notice_id):
+        self.run("DELETE FROM notices WHERE id = ?", (notice_id,))
+
+    # 2.9c editable page content (Parent tab, staff-managed)
+    def set_content(self, key, value):
+        self.run(
+            """INSERT INTO site_content (key, value) VALUES (?, ?)
+               ON CONFLICT(key) DO UPDATE SET value = excluded.value""",
+            (key, value),
+        )
+
+    def get_content(self, key):
+        row = self.fetch_one(
+            "SELECT value FROM site_content WHERE key = ?", (key,))
+        return row["value"] if row else None
+
     # 2.10 seed data (one-time, guarded by app_meta)
     def seed_demo_data(self):
         if self.fetch_one("SELECT value FROM app_meta WHERE key='seeded'"):
@@ -489,7 +617,7 @@ class DB:
         for (proj, mile, offset, load, status, dept_idx) in milestone_seeds:
             self.add_milestone(
                 DEPARTMENTS[dept_idx], proj, mile,
-                self.day_iso(offset), load, status)
+                self.day_iso(offset), load, status, approved=1)
 
         grievance_seeds = [
             ("Computer Science & Engineering (CSE)",
@@ -584,6 +712,19 @@ class DB:
         for (title, dept, offset, desc, status) in deadline_seeds:
             self.add_deadline(
                 title, dept, self.day_iso(offset), desc, status)
+
+        notice_seeds = [
+            ("Welcome to the SIT Campus Care hub",
+             "This public page keeps parents informed about deadlines, "
+             "events, and how the institute is working through issues.",
+             ALL_DEPARTMENTS),
+            ("End-semester exam schedule announced",
+             "The timetable has been published. Contact your department "
+             "office for any clashes or queries.",
+             ALL_DEPARTMENTS),
+        ]
+        for (title, body, dept) in notice_seeds:
+            self.add_notice(title, body, dept)
 
         self.run(
             "INSERT OR REPLACE INTO app_meta (key, value) VALUES ('seeded', ?)",
@@ -988,7 +1129,9 @@ def render_student_view(db):
                             deadline_progress(row["deadline"], now))
                         st.caption(
                             f"Workload feedback: {row['workload_feedback']} | "
-                            f"Status: {row['status']}")
+                            f"Status: {row['status']}"
+                            + (" | Pending approval" if row["approved"] == 0
+                               else " | Approved"))
 
     # Tab 3 - Grievance Form
     with tab_grievance:
@@ -1052,8 +1195,9 @@ def render_staff_view(db):
     if ALL_DEPARTMENTS in selected:
         selected = [d for d in selected if d != ALL_DEPARTMENTS]
 
-    tab_analytics, tab_meetings, tab_grievances = st.tabs(
-        ["Wellness Analytics", "Meeting Manager", "Grievance Ticket Manager"])
+    tab_analytics, tab_meetings, tab_grievances, tab_public = st.tabs(
+        ["Wellness Analytics", "Meeting Manager", "Grievance Ticket Manager",
+         "News & Public Content"])
 
     # Tab 1 - Wellness Analytics
     with tab_analytics:
@@ -1235,6 +1379,201 @@ def render_staff_view(db):
         st.subheader("Audit trail")
         render_audit_badge(db)
 
+    # Tab 4 - News & Public Content (edit what parents see)
+    with tab_public:
+        st.subheader("Notices & announcements")
+        st.caption(
+            "Published notices appear at the top of the Parent tab's "
+            "Student Timeline.")
+        with st.form("notice_form", clear_on_submit=True):
+            n_title = st.text_input(
+                "Notice title",
+                placeholder="e.g. Exam schedule published")
+            n_body = st.text_area(
+                "Notice body", placeholder="Details parents should see...")
+            n_dept = st.selectbox(
+                "Target department", DEPARTMENTS + [ALL_DEPARTMENTS],
+                index=DEPARTMENTS.index(staff_dept)
+                if staff_dept in DEPARTMENTS else len(DEPARTMENTS))
+            if st.form_submit_button("Publish notice", type="primary"):
+                if n_title.strip():
+                    db.add_notice(
+                        n_title.strip(), n_body.strip(),
+                        ALL_DEPARTMENTS if n_dept == ALL_DEPARTMENTS
+                        else n_dept)
+                    st.session_state["toast"] = "Notice published."
+                    st.rerun()
+                else:
+                    st.error("A title is required for the notice.")
+
+        notices = make_dataframe(db.get_notices(visible_only=False))
+        if not notices.empty:
+            st.markdown("**Manage published notices**")
+            for _, n in notices.head(10).iterrows():
+                with st.expander(
+                        f"{n['posted_on'][:10]} - {n['title']} "
+                        f"({n['department']})"
+                        + ("  [HIDDEN]" if n["visible"] == 0 else "")):
+                    st.write(n["body"] or "-")
+                    cA, cB, cC = st.columns([1, 2, 1])
+                    hide_btn = ("Hide" if n["visible"] == 1 else "Show")
+                    if cA.button(hide_btn, key=f"note_tgl_{n['id']}"):
+                        new_vis = 0 if n["visible"] == 1 else 1
+                        db.update_notice(n["id"], n["title"], n["body"],
+                                         n["department"], new_vis)
+                        st.session_state["toast"] = (
+                            "Notice hidden from the parent tab."
+                            if new_vis == 0 else "Notice is visible again.")
+                        st.rerun()
+                    if cB.button("Edit", key=f"note_edit_{n['id']}"):
+                        st.session_state["editing_notice"] = n["id"]
+                        st.rerun()
+
+            edit_id = st.session_state.get("editing_notice")
+            if edit_id is not None:
+                match = notices[notices["id"] == edit_id]
+                if not match.empty:
+                    cur = match.iloc[0]
+                    st.markdown("**Editing notice**")
+                    with st.form("notice_edit_form"):
+                        e_title = st.text_input(
+                            "Notice title", value=cur["title"],
+                            key="ne_title")
+                        e_body = st.text_area(
+                            "Notice body", value=cur["body"] or "",
+                            key="ne_body")
+                        e_dept = st.selectbox(
+                            "Target department",
+                            DEPARTMENTS + [ALL_DEPARTMENTS],
+                            index=(
+                                DEPARTMENTS + [ALL_DEPARTMENTS]).index(
+                                    cur["department"]),
+                            key="ne_dept")
+                        save_clicked = st.form_submit_button(
+                            "Save changes", type="primary")
+                        cancel_clicked = st.form_submit_button("Cancel")
+                    if save_clicked:
+                        db.update_notice(
+                            edit_id, e_title.strip(), e_body.strip(),
+                            ALL_DEPARTMENTS if e_dept == ALL_DEPARTMENTS
+                            else e_dept, cur["visible"])
+                        del st.session_state["editing_notice"]
+                        st.session_state["toast"] = "Notice updated."
+                        st.rerun()
+                    if cancel_clicked:
+                        del st.session_state["editing_notice"]
+                        st.rerun()
+        else:
+            st.info("No notices published yet.")
+
+        st.divider()
+        st.subheader("Deadlines & events")
+        st.caption("These appear in the Student Timeline on the parent tab.")
+        with st.form("deadline_form", clear_on_submit=True):
+            d_title = st.text_input(
+                "Event / deadline title",
+                placeholder="e.g. Industry guest lecture")
+            d_desc = st.text_input("Short description (optional)")
+            d_dept = st.selectbox(
+                "Department", DEPARTMENTS + [ALL_DEPARTMENTS],
+                index=DEPARTMENTS.index(staff_dept)
+                if staff_dept in DEPARTMENTS else len(DEPARTMENTS),
+                key="dl_dept")
+            d_date = st.date_input(
+                "Due date",
+                value=datetime.date.today() + datetime.timedelta(days=7),
+                key="dl_date")
+            if st.form_submit_button("Publish deadline", type="primary"):
+                if d_title.strip():
+                    db.add_deadline(
+                        d_title.strip(),
+                        ALL_DEPARTMENTS if d_dept == ALL_DEPARTMENTS
+                        else d_dept,
+                        d_date.isoformat(), d_desc.strip(), "Published")
+                    st.session_state["toast"] = "Deadline published."
+                    st.rerun()
+                else:
+                    st.error("A title is required for the deadline.")
+
+        deadlines = make_dataframe(db.get_deadlines())
+        if not deadlines.empty:
+            st.markdown("**Manage published deadlines**")
+            for _, d in deadlines.head(12).iterrows():
+                with st.expander(
+                        f"{d['due_date']} - {d['title']} ({d['department']})"):
+                    st.write(d["description"] or "-")
+                    if st.button("Delete", key=f"dl_del_{d['id']}"):
+                        db.delete_deadline(d["id"])
+                        st.session_state["toast"] = "Deadline removed."
+                        st.rerun()
+        else:
+            st.info("No deadlines published yet.")
+
+        st.divider()
+        st.subheader("Milestone approvals")
+        st.caption(
+            "Student-submitted milestones only reach the parent timeline "
+            "once approved here.")
+        all_miles = make_dataframe(db.get_milestones())
+        if all_miles.empty:
+            st.info("No milestones to review.")
+        else:
+            pending = all_miles[all_miles["approved"] == 0]
+            if selected:
+                pending = pending[pending["department"].isin(selected)]
+            if pending.empty:
+                st.info("No milestones waiting for approval.")
+            else:
+                for _, m in pending.head(12).iterrows():
+                    cols = st.columns([3, 1, 1])
+                    cols[0].markdown(
+                        f"**{m['milestone_title']}** ({m['deadline']})  \n"
+                        f"_{m['project_name']} | {m['department']} | "
+                        f"Status: {m['status']} | "
+                        f"Load: {m['workload_feedback']}_")
+                    if cols[1].button(
+                            "Approve", type="primary",
+                            key=f"ms_app_{m['id']}"):
+                        db.set_milestone_approved(m["id"])
+                        st.session_state["toast"] = (
+                            f"'{m['milestone_title']}' approved and live on "
+                            "the parent timeline.")
+                        st.rerun()
+                    if cols[2].button("Remove", key=f"ms_rem_{m['id']}"):
+                        db.delete_milestone(m["id"])
+                        st.session_state["toast"] = "Milestone removed."
+                        st.rerun()
+
+        st.divider()
+        st.subheader("Parent tab text (Burnout Guide)")
+        st.caption(
+            "These fill the written sections parents see. The transparency "
+            "ledger stays auto-computed.")
+        with st.form("content_form"):
+            c_intro = st.text_area(
+                "Intro", value=db.get_content("burnout_intro")
+                or CONTENT_DEFAULTS["burnout_intro"], height=90)
+            c_signs = st.text_area(
+                "Early warning signs",
+                value=db.get_content("burnout_signs")
+                or CONTENT_DEFAULTS["burnout_signs"], height=150)
+            c_help = st.text_area(
+                "How parents can help",
+                value=db.get_content("burnout_help")
+                or CONTENT_DEFAULTS["burnout_help"], height=150)
+            c_contacts = st.text_area(
+                "Campus contacts (markdown table)",
+                value=db.get_content("burnout_contacts")
+                or CONTENT_DEFAULTS["burnout_contacts"], height=150)
+            if st.form_submit_button("Save parent page text", type="primary"):
+                db.set_content("burnout_intro", c_intro.strip())
+                db.set_content("burnout_signs", c_signs.strip())
+                db.set_content("burnout_help", c_help.strip())
+                db.set_content("burnout_contacts", c_contacts.strip())
+                st.session_state["toast"] = (
+                    "Parent page text saved - visible immediately.")
+                st.rerun()
+
 
 # =====================================================================
 # SECTION 9: PARENT / PUBLIC VIEW
@@ -1247,6 +1586,17 @@ def render_parent_view(db):
 
     # Tab 1 - Student Timeline
     with tab_timeline:
+        notices = make_dataframe(db.get_notices())
+        if not notices.empty:
+            st.markdown("**Notices & announcements**")
+            for _, n in notices.iterrows():
+                with st.container(border=True):
+                    st.markdown(f"**{n['title']}**")
+                    st.caption(
+                        f"{n['posted_on'][:10]} | {n['department']}")
+                    st.write(n["body"] or "")
+            st.divider()
+
         st.subheader("Academic deadlines & upcoming events")
         deadlines = make_dataframe(db.get_deadlines())
         if deadlines.empty:
@@ -1270,6 +1620,8 @@ def render_parent_view(db):
             st.divider()
             st.markdown("**Upcoming student milestones**")
             milestones = make_dataframe(db.get_milestones())
+            if not milestones.empty:
+                milestones = milestones[milestones["approved"] == 1]
             upcoming = milestones[
                 pd.to_datetime(milestones["deadline"])
                 >= pd.to_datetime(datetime.date.today())] if not milestones.empty \
@@ -1289,41 +1641,19 @@ def render_parent_view(db):
     with tab_burnout:
         st.subheader("Helping students manage pressure")
 
-        st.markdown(
-            "**What is burnout?**\n\n"
-            "Long-term stress that has not wound down. It is different from a "
-            "tough exam week - it lasts for weeks and affects energy, "
-            "motivation and health. The sections below give parents practical, "
-            "evidence-based guidance.")
+        def content(key):
+            return db.get_content(key) or CONTENT_DEFAULTS[key]
+
+        st.markdown(content("burnout_intro"))
 
         with st.expander("Early warning signs - what to watch for"):
-            st.markdown(
-                "1. Grades or attendance dropping sharply\n"
-                "2. Withdrawing from friends and group activities\n"
-                "3. Trouble sleeping or sleeping all weekend\n"
-                "4. Repeated physical complaints (headaches, stomach ache)\n"
-                "5. Irritability, or giving up on assignments early")
+            st.markdown(content("burnout_signs"))
 
         with st.expander("How parents can help (positive, practical steps)"):
-            st.markdown(
-                "- Keep check-ins short and judgment-free ('how's the "
-                "workload feeling this week?')\n"
-                "- Encourage one hobby that has nothing to do with grades\n"
-                "- Help them protect sleep and meals around exam season\n"
-                "- Normalise asking for help - it is strength, not weakness\n"
-                "- Contact the department when patterns persist for 2+ weeks")
+            st.markdown(content("burnout_help"))
 
-        with st.expander("Campus contacts (add real ones here)"):
-            # EDIT ME: real counselling / helpline contacts
-            st.markdown(
-                "| Resource | Details |\n"
-                "|---|---|\n"
-                "| Student Counselling Cell | Room 201, Admin Block - "
-                "Mon to Fri, 10 am - 4 pm |\n"
-                "| Faculty Wellness Officer | One designated staff per "
-                "department |\n"
-                "| Emergency / Helpline | Placeholder: 1800-XXX-XXXX |\n"
-                "| Student Affairs Office | studentaffairs@sit.edu.in |")
+        with st.expander("Campus contacts"):
+            st.markdown(content("burnout_contacts"))
 
         st.success(
             "Remember: stress is common, burnout is not a sign of weakness. "

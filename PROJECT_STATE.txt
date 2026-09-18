@@ -138,8 +138,12 @@ Audit trail:
                   Tab 2 Meeting Manager (create slots, Open->Booked->Taken)
                   Tab 3 Grievance Ticket Manager (forward-only status moves,
                         staff notes, full audit chain viewer + verify badge)
-  PARENT / PUBLIC Tab 1 Student Timeline (academic deadlines + milestones)
-                  Tab 2 Burnout Guide (static wellness resources/contacts)
+                  Tab 4 News & Public Content (publish notices + deadlines,
+                        approve student milestones, edit the Parent-tab text)
+  PARENT / PUBLIC Tab 1 Student Timeline (notices + deadlines + APPROVED
+                        milestones only)
+                  Tab 2 Burnout Guide (staff-editable text, stored in DB,
+                        sensible defaults)
                   Tab 3 Transparency Ledger (resolution rate, avg days,
                         per-dept progress, currency of numbers + pledge)
 
@@ -148,8 +152,10 @@ Audit trail:
 ============================================================================
   [ ] Swap "Auditorium" -> "JC Bose Hall" in the guest-lecture deadline
       (on request - user hasn't confirmed JC Bose Hall's role yet).
-  [ ] Replace placeholder counselling/helpline contacts in the Burnout
-      Guide "Campus contacts" block (# EDIT ME marker in the code).
+  [x] Replace placeholder counselling/helpline contacts in the Burnout
+      Guide "Campus contacts" block (# EDIT ME marker in the code) -
+      DONE 2026-09-18: contacts are now editable in-app by staff
+      (News & Public Content tab) and read from the site_content table.
   [ ] Optional: let students book Staff meeting slots from the student view
       (currently staff-managed only).
 
@@ -282,4 +288,42 @@ Audit trail:
              creation/pruning/SPACE_ID-skip, export contents (credentials
              excluded, seal + title present), and the splash template
              (balanced braces + substitution). Real sit_hub.db untouched.
+
+2026-09-18  Parent / public content is now staff-editable + milestone
+             approval workflow:
+
+             [1] New tables (auto-created + safe migration for existing DBs):
+              - notices (title, body, department, posted_on, created_by,
+                visible) - staff publish/ edit / hide / delete; shown at the
+                top of the Parent Student Timeline.
+              - site_content (key -> text) - holds the Burnout Guide's intro,
+                warning signs, parent-help steps, and Campus contacts. Seeded
+                with the previous hardcoded copy via INSERT OR IGNORE, so the
+                parent tab shows sensible defaults until staff saves changes.
+              - milestones gained an `approved` column (migrate() adds it via
+                PRAGMA check when missing). Seeded demo milestones are
+                approved=1; student-submitted milestones start at approved=0.
+             [2] Staff / Admin new 4th tab "News & Public Content":
+              - publish notices + deadlines (add_deadline) with inline
+                edit/hide/delete; the parent tab reflects changes on rerun.
+              - milestone approval list (filtered by the staff department
+                multiselect): Approve makes it appear on the parent timeline,
+                Remove deletes it.
+              - text areas to rewrite every written section of the Parent
+                Burnout Guide (persisted to site_content).
+             [3] Student view: milestone list marks entries "Pending approval"
+                 (or "Approved") in the caption.
+             [4] Parent / public view: Student Timeline now shows notices,
+                 then deadlines, then only approved milestones; Burnout Guide
+                 renders from site_content with fallback to CONTENT_DEFAULTS.
+                 Transparency Ledger stays auto-computed and uneditable.
+
+             Verification: py_compile; headless DB-layer tests (fresh seed,
+             approval flow, notice + deadline + content CRUD, and migration
+             of an existing 'old-schema' DB with no data loss); Streamlit
+             AppTest UI smoke test logging in as Demo Staff (tabs incl. the
+             new 4th tab) and Demo Parent (all 3 tabs render). Real
+             sit_hub.db untouched. app.py + PROJECT_STATE.txt pushed to
+             GitHub (commit 28264c4 adds the PWA launcher; next push carries
+             this feature).
 ============================================================================
