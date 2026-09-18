@@ -349,6 +349,18 @@ Audit trail:
                  (read-only check): notices/site_content tables + approved
                  column are absent pre-migration and created in-code at
                  startup, exactly as tested.
+             [4] Root cause after the first hardening deploy: live error was
+                 "AttributeError: 'DB' object has no attribute 'get_notices'"
+                 while DB.get_notices clearly exists in the deployed file.
+                 The running process executed fresh new UI code but reused a
+                 PRE-FEATURE DB instance cached by get_db()'s
+                 @st.cache_resource. Its cache key is get_db's source hash,
+                 and get_db's one-line body is byte-identical across
+                 versions, so the stale instance survived the deploy.
+                 Fixed by removing the decorator: get_db() returns a fresh
+                 DB every rerun, making a stale-class instance impossible
+                 (cost is negligible for this small sqlite demo app).
+                 py_compile + DB-layer + AppTest UI smoke re-run locally.
 
              Action for the expo owner: after this push (which auto-redeploys
              the Cloud app), hard-refresh the live app; if the error banner

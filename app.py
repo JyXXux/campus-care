@@ -791,7 +791,6 @@ def log_user_in(user):
 # =====================================================================
 # SECTION 4: STATE INIT
 # =====================================================================
-@st.cache_resource(show_spinner=False)
 def get_db():
     return DB(DB_FILE)
 
