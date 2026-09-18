@@ -2,7 +2,7 @@
 PROJECT STATE - SIT CAMPUS CARE, WELLNESS & ACCOUNTABILITY HUB
 ============================================================================
 Created  : 2026-09-17
-Updated  : 2026-09-18
+Updated  : 2026-09-19
 Purpose  : Session handoff. Read this first whenever work resumes so you
            (or an AI assistant) can pick up exactly where things left off.
            Append new work to the CHANGELOG at the bottom.
@@ -11,7 +11,8 @@ Purpose  : Session handoff. Read this first whenever work resumes so you
 1. WHAT THIS PROJECT IS
 ============================================================================
 A single-file Streamlit web app built for the Siliguri Institute of
-Technology (SIT) institutional exhibition. It works 100% OFFLINE.
+Technology (SIT) institutional exhibition. It works 100% OFFLINE and
+is also hosted live for the exhibition.
 
 It combines:
   - Role-based register/login  (Student / Staff-Admin / Parent)
@@ -21,14 +22,21 @@ It combines:
     with a TAMPER-EVIDENT hash-chain audit trail
   - Staff wellness analytics, meeting (appointment) slots
   - Parent / public timeline, burnout guide, transparency ledger
+  - Staff-editable public content: notices + Parent-tab text
+    (staff "News & Public Content" tab, approved milestones)
 
 Tech: Python + Streamlit, SQLite (stdlib), hashlib, datetime, pandas.
 Data never leaves the device.
 
+Live (exhibition day):
+  - App      : https://sit-campus-care.streamlit.app/  (repo auto-deploys)
+  - PWA shell: https://sitcampushub.netlify.app/  (drag-drop per deploy)
+  - Repo     : https://github.com/JyXXux/campus-care  (main, public)
+
 ============================================================================
 2. FILES IN THIS FOLDER  (F:\College Hub)
 ============================================================================
-  app.py            The entire application (UI + logic + database). ~1500
+  app.py            The entire application (UI + logic + database). ~1900
                     lines. All tunable values are in "SECTION 1: CONFIG".
   requirements.txt  streamlit + pandas. Install once with:
                         pip install -r requirements.txt
@@ -41,6 +49,13 @@ Data never leaves the device.
    backups\          Auto-created on launch (laptop only). Keeps the last
                      MAX_BACKUPS (10) timestamped copies of sit_hub.db so the
                      durable local copy is effectively loss-proof.
+   pwa\              installable PWA launcher (static, no python): fullscreen
+                     shell that redirects to the live app, offline cache. Deploy
+                     to Netlify by drag-dropping the folder (Netlify is NOT
+                     git-connected; GitHub copy is just for versioning).
+  JUDGES_GUIDE.txt   judges' handout: pitch, demo flow, line-by-line app.py
+                     tour with verified line numbers, security notes, Q&A.
+                     Laptop-only, not pushed to GitHub.
 
 ============================================================================
 3. HOW TO RUN / STOP
@@ -48,6 +63,10 @@ Data never leaves the device.
   - Double-click  app.py   OR   run.bat
   - A console opens, the browser auto-opens on http://localhost:8501
   - To stop: press CTRL+C in the console, or just close the window.
+
+  On exhibition day the NORMAL entry point is the live URLs (streamlit
+  main / Netlify PWA); running locally is the offline fallback. Local
+  laptop data is the durable copy and is NOT the same DB as the cloud.
 
   (app.py has a guard: if it is run as a plain script instead of via
    "streamlit run", it relaunches itself through Streamlit automatically.)
@@ -98,6 +117,13 @@ Data never leaves the device.
 SQLite tables created on boot (see DB.create_tables):
   users  wellness_logs  milestones  grievances  grievance_audit
   meeting_slots  academic_deadlines  app_meta
+  notices  site_content   (added 2026-09-18; migrate() adds the
+                           milestones.approved column to older DBs)
+
+Cloud note: the deployed app carries its OWN sit_hub.db on the cloud
+container. Any local edits do not reach it (each redeploy starts fresh
+unless migration runs). Demo data on the cloud is ephemeral by design
+- resetting it is safe; the laptop sit_hub.db is the durable copy.
 
 Seeding:
   - Guarded by app_meta key "seeded" -> seeds exactly once ever.
