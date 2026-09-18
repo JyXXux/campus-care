@@ -324,6 +324,36 @@ Audit trail:
              AppTest UI smoke test logging in as Demo Staff (tabs incl. the
              new 4th tab) and Demo Parent (all 3 tabs render). Real
              sit_hub.db untouched. app.py + PROJECT_STATE.txt pushed to
-             GitHub (commit 28264c4 adds the PWA launcher; next push carries
-             this feature).
+             GitHub (commit 28264c4 adds the PWA launcher; commit a996880
+             carries this feature).
+
+2026-09-18  Cloud hardening for the deployed Streamlit app:
+
+             After deploying the content-editor feature, the live app at
+             sit-campus-care.streamlit.app showed a redacted AttributeError on
+             db.get_notices(...) in the staff view, while the repo HEAD (which
+             is what the cloud deploys) defined the method and all headless
+             tests passed. The traceback line numbers matched the pushed file
+             exactly, so the running process/container was stale - not the
+             code. Fixes applied:
+
+             [1] DB.__init__ now wraps its bootstrap (create_tables, migrate,
+                 ensure_content_defaults, demo seed) in try/except and
+                 re-raises as RuntimeError embedding the real exception type
+                 and message - so a schema/seed failure can never surface as a
+                 misleading downstream AttributeError.
+             [2] main() wraps the role dispatch (student/staff/parent) in
+                 try/except and renders st.exception, so any live error shows
+                 its true, unredacted type and message in the UI.
+             [3] Recovery drill verified on the real old-schema sit_hub.db
+                 (read-only check): notices/site_content tables + approved
+                 column are absent pre-migration and created in-code at
+                 startup, exactly as tested.
+
+             Action for the expo owner: after this push (which auto-redeploys
+             the Cloud app), hard-refresh the live app; if the error banner
+             persists, click 'Restart' in the Streamlit Cloud dashboard and
+             (only if it STILL errors) trigger a full redeploy - the cloud
+             sit_hub.db is ephemeral demo data by design and may be reset;
+             the laptop sit_hub.db is never touched.
 ============================================================================

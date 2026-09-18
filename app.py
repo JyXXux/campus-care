@@ -164,11 +164,17 @@ class DB:
     def __init__(self, path):
         self.conn = sqlite3.connect(path, check_same_thread=False)
         self.conn.row_factory = sqlite3.Row
-        self.create_tables()
-        self.migrate()
-        self.ensure_content_defaults()
-        if AUTO_SEED_DEMO:
-            self.seed_demo_data()
+        try:
+            self.create_tables()
+            self.migrate()
+            self.ensure_content_defaults()
+            if AUTO_SEED_DEMO:
+                self.seed_demo_data()
+        except Exception as e:
+            raise RuntimeError(
+                f"Database bootstrap failed for {path}: "
+                f"{type(e).__name__}: {e}"
+            ) from e
 
     # 2.1 low-level helpers
     def run(self, sql, params=()):
@@ -1872,14 +1878,18 @@ def main():
         return
 
     role = st.session_state["auth"]["role"]
-    if role == ROLE_STUDENT:
-        render_student_view(db)
-    elif role == ROLE_STAFF:
-        render_staff_view(db)
-    elif role == ROLE_PARENT:
-        render_parent_view(db)
-    else:
-        st.error(f"Unknown role: {role}")
+    try:
+        if role == ROLE_STUDENT:
+            render_student_view(db)
+        elif role == ROLE_STAFF:
+            render_staff_view(db)
+        elif role == ROLE_PARENT:
+            render_parent_view(db)
+        else:
+            st.error(f"Unknown role: {role}")
+    except Exception as e:
+        st.error("An unexpected error occurred while rendering this view.")
+        st.exception(e)
 
     render_footer()
 
