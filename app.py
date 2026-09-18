@@ -21,14 +21,14 @@ LOGO_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)),
 BACKUP_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "backups")
 MAX_BACKUPS = 10
 
-# True = seed demo data on first run
+# seed demo data on first run
 AUTO_SEED_DEMO = True
 
 # =====================================================================
-# SECTION 1: CONFIG  (edit me)
+# SECTION 1: CONFIG (edit me)
 # =====================================================================
 
-# Departments (add / remove branches here)
+# departments list
 DEPARTMENTS = [
     "BCA",
     "MCA",
@@ -43,10 +43,10 @@ DEPARTMENTS = [
     "Hotel Management",
 ]
 
-# for Parent accounts and "no branch" entries
+# parent accounts + "no branch" entries
 ALL_DEPARTMENTS = "All Departments"
 
-# Roles
+# roles
 ROLE_STUDENT = "Student"
 ROLE_STAFF = "Staff / Admin"
 ROLE_PARENT = "Parent"
@@ -55,12 +55,12 @@ ROLES = [ROLE_STUDENT, ROLE_STAFF, ROLE_PARENT]
 MIN_PASSWORD_LEN = 4           # minimum signup password length
 PBKDF2_ITERATIONS = 100_000    # password hashing cost (higher = safer)
 
-# Wellness scale
+# wellness scale (1-10)
 STRESS_MIN = 1
 STRESS_MAX = 10
 HIGH_STRESS_THRESHOLD = 7      # "high stress" cutoff
 
-# Grievance workflow
+# grievance workflow (no skiping steps)
 STATUS_WORKFLOW = ["Pending", "In Progress", "Resolved"]
 GRIEVANCE_CATEGORIES = [
     "Campus Infrastructure",
@@ -77,7 +77,7 @@ GRIEVANCE_CATEGORIES = [
     "Other",
 ]
 
-# places shown in the grievance form's "Where is it?" list
+# grievance "where is it?" dropdown
 CAMPUS_PLACES = [
     "JC Bose Hall",
     "Common Room",
@@ -91,7 +91,7 @@ CAMPUS_PLACES = [
 ]
 SEAL = "SIT-HUB-AUDIT-SEAL-v1"  # audit-chain secret; changing it invalidates every old chain
 
-# Meeting slots
+# meeting slots
 SLOT_STATUS = ["Open", "Booked", "Taken"]   # Open -> Booked -> Taken
 TIME_SLOTS_POOL = [
     "09:00 - 09:30", "09:30 - 10:00", "10:00 - 10:30", "10:30 - 11:00",
@@ -99,12 +99,12 @@ TIME_SLOTS_POOL = [
     "15:00 - 15:30", "15:30 - 16:00",   # available time frames
 ]
 
-# Milestone / workload options
+# milestone / workload options
 WORKLOAD_LEVELS = ["Low", "Moderate", "Heavy"]
 MILESTONE_STATUS = ["On Track", "At Risk", "Completed"]
 
-# parent/public tab default text. staff can edit it in-app;
-# once someone saves, the DB copy beats these.
+# parent tab defualt text (staff can edit it);
+# once saved, the DB copy beats the defaults.
 CONTENT_DEFAULTS = {
     "burnout_intro": (
         "**What is burnout?**\n\n"
@@ -135,7 +135,7 @@ CONTENT_DEFAULTS = {
         "| Student Affairs Office | studentaffairs@sit.edu.in |"),
 }
 
-# demo logins - the one-click buttons
+# demo logins (one-click buttons)
 DEMO_ACCOUNTS = {
     "Demo Student": {
         "username": "student1",
@@ -176,7 +176,7 @@ class DB:
                 f"{type(e).__name__}: {e}"
             ) from e
 
-    # little db helpers
+    # small db helpers
     def run(self, sql, params=()):
         self.conn.execute(sql, params)
         self.conn.commit()
@@ -343,7 +343,7 @@ class DB:
             (username, email),
         ) is not None
 
-    # anonymous wellness logs
+    # annonymous wellness logs (no names stored)
     def add_wellness_log(self, token_id, department, stress_lvl, notes):
         self.run(
             """INSERT INTO wellness_logs
@@ -377,10 +377,10 @@ class DB:
     def delete_milestone(self, milestone_id):
         self.run("DELETE FROM milestones WHERE id = ?", (milestone_id,))
 
-    # grievances + the tamper-proof audit chain
+    # grievances + tamper-proof audit chain (dont tamper)
     def next_ticket_no(self):
-        # MAX(id), not COUNT(*): deleted tickets must never get their
-        # number back, or the UNIQUE ticket_no constraint blows up.
+        # MAX(id), not COUNT(*): a deleted ticket's number
+        # is gone forever - the UNIQUE ticket_no blows up otherwise.
         row = self.fetch_one(
             "SELECT COALESCE(MAX(id), 0) AS n FROM grievances")
         return f"SIT-{1000 + row['n']:04d}"
@@ -446,7 +446,8 @@ class DB:
                WHERE ticket_no = ?""",
             (new_status, change_time, ticket_no))
 
-        # each change links to the last hash, so editing one breaks the whole chain
+        # each change chains to the previous hash;
+        # editing one row makes the whole trail scream.
         self.append_audit(ticket_no, old_status, new_status,
                           changed_by, change_time)
         return change_time
@@ -518,7 +519,7 @@ class DB:
         self.run("DELETE FROM academic_deadlines WHERE id = ?",
                  (deadline_id,))
 
-    # notices - announcements parents can see
+    # notices - parent anouncements
     def add_notice(self, title, body, department, visible=1,
                    created_by="SIT Admin"):
         self.run(
@@ -545,7 +546,7 @@ class DB:
     def delete_notice(self, notice_id):
         self.run("DELETE FROM notices WHERE id = ?", (notice_id,))
 
-    # parent page text, editable by staff
+    # parent text, staff-editable
     def set_content(self, key, value):
         self.run(
             """INSERT INTO site_content (key, value) VALUES (?, ?)
@@ -558,7 +559,7 @@ class DB:
             "SELECT value FROM site_content WHERE key = ?", (key,))
         return row["value"] if row else None
 
-    # one-time demo seed (guarded by app_meta)
+    # one-time demo seed (app_meta guards it)
     def seed_demo_data(self):
         if self.fetch_one("SELECT value FROM app_meta WHERE key='seeded'"):
             return
@@ -849,7 +850,7 @@ def compute_audit_hash(prev_hash, ticket_no, new_status, changed_by, change_time
 
 
 def make_token(db, username):
-    # fresh uuid each time, so tokens can't be traced back or matched
+    # fresh uuid every time - tokens cant be traced or matched
     raw = f"{username}|{db.now_iso()}|{uuid.uuid4()}"
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
@@ -1893,7 +1894,7 @@ def main():
     render_footer()
 
 
-# double-clicking app.py re-opens it through the streamlit launcher
+# double-click app.py -> relaunches throught streamlit
 if __name__ == "__main__":
     if st.runtime.exists():
         main()
