@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>SIT Campus Care</title>
+  <meta name="theme-color" content="#1F406D">
+  <meta name="description" content="SIT Campus Care - Wellness, Accountability & Meeting Hub">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Campus Care">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+  <link rel="shortcut icon" href="icons/icon-192.png">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { height: 100%; background: #eef3f9; font-family: Arial, Helvetica, sans-serif; }
+    #launcher {
+      position: fixed; inset: 0; z-index: 10; display: flex;
+      flex-direction: column; align-items: center; justify-content: center;
+      background: linear-gradient(160deg, #ffffff, #eef3f9);
+      text-align: center; padding: 0 18px;
+    }
+    #launcher img {
+      width: 96px; height: 96px; border-radius: 20px;
+      box-shadow: 0 10px 26px rgba(31,64,109,.25);
+      animation: pulse 1.6s ease-in-out infinite;
+    }
+    #launcher h1 {
+      margin-top: 18px; font-size: 26px; font-weight: 800; color: #1F406D;
+      letter-spacing: .4px;
+    }
+    #launcher p {
+      margin-top: 6px; font-size: 14px; color: #5b6b7b;
+    }
+    .spinner {
+      margin-top: 22px; width: 34px; height: 34px; border-radius: 50%;
+      border: 4px solid #d9e2ec; border-top-color: #1F406D;
+      animation: spin .8s linear infinite;
+    }
+    #openBtn {
+      display: none; margin-top: 18px; padding: 12px 24px; border: 0;
+      border-radius: 10px; background: #1F406D; color: #fff;
+      font-weight: 700; font-size: 15px; cursor: pointer;
+      box-shadow: 0 8px 18px rgba(31,64,109,.3);
+    }
+    #openBtn:hover { background: #274C79; }
+    noscript a {
+      display: inline-block; margin-top: 18px; padding: 12px 24px;
+      border-radius: 10px; background: #1F406D; color: #fff;
+      text-decoration: none; font-weight: 700; font-size: 15px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    @keyframes pulse { 0%,100% { transform: scale(1); } 50% { transform: scale(1.06); } }
+  </style>
+</head>
+<body>
+  <div id="launcher">
+    <img src="icons/icon-192.png" alt="Campus Care">
+    <h1>SIT Campus Care</h1>
+    <p>Launching campus services…</p>
+    <div class="spinner"></div>
+    <button id="openBtn">Open app</button>
+    <noscript><a href="https://sit-campus-care.streamlit.app/">Open app</a></noscript>
+  </div>
+  <script>
+    const APP_URL = "https://sit-campus-care.streamlit.app/";
+    const openBtn = document.getElementById("openBtn");
+
+    openBtn.addEventListener("click", function () {
+      doLaunch();
+    });
+
+    function doLaunch() {
+      window.location.replace(APP_URL);
+    }
+
+    setTimeout(doLaunch, 1500);
+    setTimeout(function () {
+      if (window.location.href.indexOf(APP_URL) !== 0) {
+        openBtn.style.display = "inline-block";
+      }
+    }, 4000);
+  </script>
+</body>
+</html>

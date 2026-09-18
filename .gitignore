@@ -1,0 +1,7 @@
+sit_hub.db
+backups/
+__pycache__/
+*.pyc
+logo.png
+run.bat
+.streamlit/

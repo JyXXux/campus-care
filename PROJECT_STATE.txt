@@ -1,0 +1,285 @@
+============================================================================
+PROJECT STATE - SIT CAMPUS CARE, WELLNESS & ACCOUNTABILITY HUB
+============================================================================
+Created  : 2026-09-17
+Updated  : 2026-09-18
+Purpose  : Session handoff. Read this first whenever work resumes so you
+           (or an AI assistant) can pick up exactly where things left off.
+           Append new work to the CHANGELOG at the bottom.
+
+============================================================================
+1. WHAT THIS PROJECT IS
+============================================================================
+A single-file Streamlit web app built for the Siliguri Institute of
+Technology (SIT) institutional exhibition. It works 100% OFFLINE.
+
+It combines:
+  - Role-based register/login  (Student / Staff-Admin / Parent)
+  - Anonymous wellness check-ins (pseudonymous SHA-256 tokens)
+  - Milestone / deadline tracking
+  - Grievance reporting -> department-route -> status workflow
+    with a TAMPER-EVIDENT hash-chain audit trail
+  - Staff wellness analytics, meeting (appointment) slots
+  - Parent / public timeline, burnout guide, transparency ledger
+
+Tech: Python + Streamlit, SQLite (stdlib), hashlib, datetime, pandas.
+Data never leaves the device.
+
+============================================================================
+2. FILES IN THIS FOLDER  (F:\College Hub)
+============================================================================
+  app.py            The entire application (UI + logic + database). ~1500
+                    lines. All tunable values are in "SECTION 1: CONFIG".
+  requirements.txt  streamlit + pandas. Install once with:
+                        pip install -r requirements.txt
+  run.bat           Double-click launcher (cd's to folder, runs
+                    "python -m streamlit run app.py", pauses on exit).
+  sit_hub.db        SQLite data file created automatically on first run.
+                    Safe to delete anytime to reset to fresh demo data
+                    (it will re-seed itself on next launch).
+  __pycache__       Generated python cache - ignore.
+   backups\          Auto-created on launch (laptop only). Keeps the last
+                     MAX_BACKUPS (10) timestamped copies of sit_hub.db so the
+                     durable local copy is effectively loss-proof.
+
+============================================================================
+3. HOW TO RUN / STOP
+============================================================================
+  - Double-click  app.py   OR   run.bat
+  - A console opens, the browser auto-opens on http://localhost:8501
+  - To stop: press CTRL+C in the console, or just close the window.
+
+  (app.py has a guard: if it is run as a plain script instead of via
+   "streamlit run", it relaunches itself through Streamlit automatically.)
+
+  NOTE on the first-ever run: Streamlit once asked for an email address.
+  That was answered with a blank email, so it will NOT ask again.
+
+  The blue-text "NativeCommandError" lines in PowerShell when booting are
+  only PowerShell complaining about Streamlit writing logs to stderr -
+  they are harmless and the app is still working.
+
+============================================================================
+4. WHERE TO EDIT THINGS  (app.py, SECTION 1: CONFIG)
+============================================================================
+  APP_TITLE / APP_SUBTITLE      Brand text (title bar + sidebar caption).
+  DB_FILE                       Where the SQLite file lives.
+  AUTO_SEED_DEMO                True = seed demo data on first run.
+  DEPARTMENTS                   The branch list (dropdowns everywhere).
+  ALL_DEPARTMENTS               "All Departments" pseudo-branch.
+  ROLES / ROLE_*                Role labels.
+  MIN_PASSWORD_LEN / PBKDF2_ITERATIONS   Signup rules / hashing cost.
+  STRESS_MIN / STRESS_MAX / HIGH_STRESS_THRESHOLD   Wellness scale + cutoff.
+  STATUS_WORKFLOW               Pending -> In Progress -> Resolved.
+  GRIEVANCE_CATEGORIES          Complaint category dropdown.
+  CAMPUS_PLACES                 "Where is it?" dropdown on the grievance form.
+  SEAL                          Secret mixed into audit hashes. If changed,
+                                old chains will read as "tampered".
+  SLOT_STATUS / TIME_SLOTS_POOL Meeting slot statuses + time windows.
+  WORKLOAD_LEVELS / MILESTONE_STATUS   Milestone feedback + states.
+  DEMO_ACCOUNTS                 The one-click demo logins in the sidebar.
+
+============================================================================
+5. RECORDED CUSTOMIZATIONS  (specific to SIT)
+============================================================================
+  - App is named "Campus Care" (not the long original title).
+  - 11 departments: BCA, MCA, CSE, CSE (AI), CSE (ML), IT, ECE, Electrical,
+    Civil, MBA, Hotel Management.
+  - SIT has NO HOSTELS. Facilities on campus: a GYM, a COMMON ROOM, and
+    JC BOSE HALL. Grievance categories and the location dropdown are built
+    around these real places.
+  - "Auditorium" wording is intentionally still used in one seed deadline
+    ("Industry guest lecture: AI in Healthcare"). Left unchanged on request;
+    it can be swapped to "JC Bose Hall" later.
+
+============================================================================
+6. DATA LAYER & RESET
+============================================================================
+SQLite tables created on boot (see DB.create_tables):
+  users  wellness_logs  milestones  grievances  grievance_audit
+  meeting_slots  academic_deadlines  app_meta
+
+Seeding:
+  - Guarded by app_meta key "seeded" -> seeds exactly once ever.
+  - To regenerate demo data (e.g. after changing seed text or departments):
+      1. Stop the app.
+      2. Delete  sit_hub.db
+      3. Restart - it re-seeds automatically.
+
+Demo data (3 demo users, ~184 wellness logs across 11 departments,
+6 grievance tickets SIT-1000..SIT-1005, milestones, slots, deadlines).
+
+Audit trail:
+  - Every status change appends to grievance_audit; each row stores
+    prev_hash + audit_hash (SHA-256 of prev_hash|ticket|new_status|who|time|SEAL).
+  - render_audit_badge() recomputes the whole chain and shows
+    "Audit chain verified" (green) or "Tampering detected" (red).
+  - Anyone can check it live - strong demo talking point.
+
+============================================================================
+7. DEMO ACCOUNTS
+============================================================================
+  student1 / staff1 / parent1   (password: demo123  - all three)
+  Available as one-click "Try it as..." buttons in the sidebar.
+  Self-registration is also open for any role (demo mode).
+
+  Login state lives in st.session_state; seed accounts are created in
+  sit_hub.db on first seeding. Passwords are salted PBKDF2 hashes, never
+  plain text.
+
+============================================================================
+8. VIEWS & TABS
+============================================================================
+  SIDEBAR         Brand block, Login/Register tabs, demo logins, logout.
+  STUDENT         Tab 1 Wellness Log (slider + notes -> SHA-256 token)
+                  Tab 2 Milestone Tracker (deadlines + workload feedback)
+                  Tab 3 Grievance Form (department + category + CAMPUS_PLACES)
+  STAFF / ADMIN   Tab 1 Wellness Analytics (metrics, per-dept bar, trend line)
+                  Tab 2 Meeting Manager (create slots, Open->Booked->Taken)
+                  Tab 3 Grievance Ticket Manager (forward-only status moves,
+                        staff notes, full audit chain viewer + verify badge)
+  PARENT / PUBLIC Tab 1 Student Timeline (academic deadlines + milestones)
+                  Tab 2 Burnout Guide (static wellness resources/contacts)
+                  Tab 3 Transparency Ledger (resolution rate, avg days,
+                        per-dept progress, currency of numbers + pledge)
+
+============================================================================
+9. DEFERRED / PENDING ITEMS
+============================================================================
+  [ ] Swap "Auditorium" -> "JC Bose Hall" in the guest-lecture deadline
+      (on request - user hasn't confirmed JC Bose Hall's role yet).
+  [ ] Replace placeholder counselling/helpline contacts in the Burnout
+      Guide "Campus contacts" block (# EDIT ME marker in the code).
+  [ ] Optional: let students book Staff meeting slots from the student view
+      (currently staff-managed only).
+
+============================================================================
+10. WINDOWS QUIRKS
+============================================================================
+  - Double-clicking app.py works via the auto-relaunch guard.
+  - If a streamlit session is killed abruptly (e.g. a tool timeout), an
+    orphaned python.exe may keep holding sit_hub.db. To free it:
+        Get-CimInstance Win32_Process -Filter "Name='python.exe'" |
+        Where-Object { $_.CommandLine -match 'streamlit|app.py' } |
+        ForEach-Object { Stop-Process -Id $_.ProcessId -Force }
+  - The app is verified to compile (python -m py_compile app.py) and the
+    DB layer has proven: seeding, login, register, audit-chain integrity
+    through a live status update.
+
+============================================================================
+11. CHANGELOG
+============================================================================
+2026-09-17  Project created from spec.
+             - Original spec: 9 departments, heavy docs, hostel categories.
+             - Added register/login + one-click demo logins.
+             - Fixed double-click crash (auto-relaunch guard + run.bat).
+             - Full comment strip; humanized UI copy.
+             - User-requested department list (11, incl. separate AI/ML).
+             - Removed ALL hostel references; added gym / common room /
+               JC Bose Hall categories + CAMPUS_PLACES location dropdown.
+             - sit_hub.db reseeded to match the new departments and places.
+             - This file created.
+
+2026-09-18  Full day's work:
+
+             [1] Grievance Ticket Manager fixes.
+              - "All Departments" now means "show everything" in the staff
+                view: it's a first-class filter option and is normalized to a
+                no-filter state, so Staff logged in as "All Departments" (or
+                any non-branch default) no longer see an empty ticket list.
+              - Ticket status selectbox defaults to the NEXT workflow step,
+                and the "Update" button is disabled when it would record
+                nothing - so one click visibly moves a ticket forward.
+              - next_ticket_no() now uses MAX(id) instead of COUNT(*), so a
+                deleted ticket can never be re-issued (UNIQUE collision fixed).
+              - Colored status badges on ticket cards + legend: gray = Pending,
+                orange = In Progress, green = Resolved (status_badge helper).
+              - Ticket Manager UI redesigned for easier use: status-count
+                metrics strip, Open / All / Resolved view toggle (Open is the
+                working queue, Resolved is read-only, tickets disappear from
+                Open once finished), edit controls moved into a "Review &
+                update" expander, action button labeled dynamically
+                ("Move to Resolved"), removed the Show-only-status multiselect.
+              - Fixed student grievances vanishing from the staff view:
+                grievance form now uses the shared "Department this entry
+                belongs to" selector (defaults to the student's own branch)
+                instead of a stray dropdown that defaulted to the first
+                department (BCA); the Ticket Manager got its own department
+                filter that defaults to ALL tickets, so a raised ticket is
+                always visible to staff immediately. Student confirmation
+                toast now names the routing target.
+
+             [2] Splash screen (v1 + v2).
+              - Auto splash screen on first load per session: centered logo
+                image (logo_small.png, optimized 512px copy of logo.png,
+                ~423 KB) with brand title/subtitle, 4s progress bar, clears
+                itself once per session. Falls back to a text wordmark if
+                logo is missing. Browser tab also shows the logo as favicon.
+              - Splash v2: redesigned with college-blue theme sampled from the
+                logo (#1F406D/#274C79). Card renders ONCE with pure-CSS
+                keyframe animations (logo scale+fade-in + glow pulse, shimmer
+                title, floating bubbles, hover-float) so they run smoothly;
+                smooth 0->100% gradient fill bar with animated sheen + glow,
+                live % counter, cycling taglines via a separate tic placeholder.
+                Fixed a template bug: card markup now substitutes placeholders
+                via string .replace() instead of .format() so CSS braces stay
+                valid (verified balanced 38/38 + py_compile).
+
+             [3] Hybrid cross-platform readiness (mobile + installable PWA).
+              - Splash screen made phone-safe: card is width:100% with
+                box-sizing and side padding, panel padding uses clamp(),
+                title font-size uses clamp(), progress bar is
+                width:min(300px,72vw), logo/splash-fallback scale down via
+                min(150px,58vw) - no horizontal clipping on ~330px phones;
+                desktop appearance unchanged. Verified py_compile.
+              - NEW pwa/ folder = installable "app" wrapper (fully static,
+                no python needed, deployable by drag-drop):
+                  pwa/index.html          fullscreen shell: branded loader,
+                                          iframe embed of the hosted app,
+                                          "Open app in full screen" fallback
+                                          link (shown if a browser blocks
+                                          the iframe), auto-hides loader on
+                                          iframe load.
+                  pwa/manifest.webmanifest  PWA metadata: "SIT Campus Care",
+                                          navy #1F406D theme, display
+                                          standalone (app-like, fullscreen).
+                  pwa/sw.js               service worker caches the shell so
+                                          the launcher opens even offline.
+                  pwa/icons/              icon-192 / icon-512 / apple-touch
+                                          (180) / maskable 192+512 - generated
+                                          from logo_small.png (originals
+                                          untouched) via System.Drawing.
+              - DEPLOY (browser uploads, no git):
+                  1) Hugging Face Spaces -> New Space -> name "campus-care"
+                     -> SDK: Streamlit -> upload app.py + requirements.txt.
+                     Then edit pwa/index.html APP_URL (2 places) to the
+                     Space's URL (https://<user>-campus-care.hf.space).
+                  2) Netlify -> Sites -> drag & drop the pwa/ folder ->
+                     https://<site>.netlify.app.
+                  3) Phone/PC: open the Netlify URL -> Install App /
+                     Add to Home screen -> launches fullscreen like an app.
+              - Database strategy decided: cloud copy stays EPHEMERAL
+                (auto-reseeded live demo - best for the exhibition: always
+                clean, self-healing, no credentials); laptop offline run.bat
+                remains the durable store.
+
+             [4] Data safety (ephemeral cloud strategy + safety nets).
+              - Auto-backup: on app launch (once per session) sit_hub.db is
+                copied to backups\sit_hub-<timestamp>.db (microsecond-stamped
+                so rapid restarts never collide) and only the newest
+                MAX_BACKUPS=10 are kept. Skipped automatically when running on
+                Hugging Face Spaces (detected via SPACE_ID env var) because
+                that filesystem is ephemeral - backups there would be wiped
+                with the container. Configurable: BACKUP_DIR, MAX_BACKUPS.
+              - Export data button in the sidebar (always visible): downloads
+                a complete JSON snapshot of all tables (users, wellness_logs,
+                milestones, grievances, grievance_audit, meeting_slots,
+                academic_deadlines) + exported_at + app title. Password
+                hashes and salts are excluded from the users export. One click
+                at end of each expo day = nothing visitor-entered is stranded.
+
+             Verification: py_compile throughout; automated tests for backup
+             creation/pruning/SPACE_ID-skip, export contents (credentials
+             excluded, seal + title present), and the splash template
+             (balanced braces + substitution). Real sit_hub.db untouched.
+============================================================================
