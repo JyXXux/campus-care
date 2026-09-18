@@ -21,11 +21,11 @@ LOGO_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)),
 BACKUP_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "backups")
 MAX_BACKUPS = 10
 
-# Demo behaviour: True = seed sample data on first run
+# True = seed demo data on first run
 AUTO_SEED_DEMO = True
 
 # =====================================================================
-# SECTION 1: CONFIG  (edit these)
+# SECTION 1: CONFIG  (edit me)
 # =====================================================================
 
 # Departments (add / remove branches here)
@@ -43,7 +43,7 @@ DEPARTMENTS = [
     "Hotel Management",
 ]
 
-# Used for Parent accounts and "no branch" entries
+# for Parent accounts and "no branch" entries
 ALL_DEPARTMENTS = "All Departments"
 
 # Roles
@@ -77,7 +77,7 @@ GRIEVANCE_CATEGORIES = [
     "Other",
 ]
 
-# Campus places shown in the grievance form's "Where is it?" dropdown
+# places shown in the grievance form's "Where is it?" list
 CAMPUS_PLACES = [
     "JC Bose Hall",
     "Common Room",
@@ -89,7 +89,7 @@ CAMPUS_PLACES = [
     "Campus Grounds",
     "Other",
 ]
-SEAL = "SIT-HUB-AUDIT-SEAL-v1"  # audit-chain secret; changing it invalidates old chains
+SEAL = "SIT-HUB-AUDIT-SEAL-v1"  # audit-chain secret; changing it invalidates every old chain
 
 # Meeting slots
 SLOT_STATUS = ["Open", "Booked", "Taken"]   # Open -> Booked -> Taken
@@ -103,8 +103,8 @@ TIME_SLOTS_POOL = [
 WORKLOAD_LEVELS = ["Low", "Moderate", "Heavy"]
 MILESTONE_STATUS = ["On Track", "At Risk", "Completed"]
 
-# Default text for the Parent / public tab (editable by staff in-app;
-# the DB copy overrides these once a staff member saves changes).
+# parent/public tab default text. staff can edit it in-app;
+# once someone saves, the DB copy beats these.
 CONTENT_DEFAULTS = {
     "burnout_intro": (
         "**What is burnout?**\n\n"
@@ -135,7 +135,7 @@ CONTENT_DEFAULTS = {
         "| Student Affairs Office | studentaffairs@sit.edu.in |"),
 }
 
-# Demo accounts (the one-click login buttons)
+# demo logins - the one-click buttons
 DEMO_ACCOUNTS = {
     "Demo Student": {
         "username": "student1",
@@ -176,7 +176,7 @@ class DB:
                 f"{type(e).__name__}: {e}"
             ) from e
 
-    # 2.1 low-level helpers
+    # little db helpers
     def run(self, sql, params=()):
         self.conn.execute(sql, params)
         self.conn.commit()
@@ -189,7 +189,7 @@ class DB:
         row = self.conn.execute(sql, params).fetchone()
         return dict(row) if row else None
 
-    # 2.2 schema
+    # tables
     def create_tables(self):
         self.run("""
             CREATE TABLE IF NOT EXISTS users (
@@ -313,7 +313,7 @@ class DB:
                 "VALUES (?, ?)", (key, value))
         self.conn.commit()
 
-    # 2.3 time helpers
+    # time helpers
     @staticmethod
     def now_iso():
         return datetime.datetime.now().replace(microsecond=0).isoformat(
@@ -324,7 +324,7 @@ class DB:
         return (datetime.date.today()
                 + datetime.timedelta(days=days_from_today)).isoformat()
 
-    # 2.4 auth
+    # auth
     def create_user(self, username, email, role, department, salt, password_hash):
         self.run(
             """INSERT INTO users
@@ -343,7 +343,7 @@ class DB:
             (username, email),
         ) is not None
 
-    # 2.5 wellness logs
+    # anonymous wellness logs
     def add_wellness_log(self, token_id, department, stress_lvl, notes):
         self.run(
             """INSERT INTO wellness_logs
@@ -355,7 +355,7 @@ class DB:
     def get_wellness_logs(self):
         return self.fetch("SELECT * FROM wellness_logs ORDER BY id DESC")
 
-    # 2.6 milestones
+    # student milestones
     def add_milestone(self, department, project_name, milestone_title,
                       deadline, workload_feedback, status, approved=0):
         self.run(
@@ -377,10 +377,10 @@ class DB:
     def delete_milestone(self, milestone_id):
         self.run("DELETE FROM milestones WHERE id = ?", (milestone_id,))
 
-    # 2.7 grievances + tamper-evident audit chain
+    # grievances + the tamper-proof audit chain
     def next_ticket_no(self):
-        # MAX(id) not COUNT(*): deleted tickets must never reuse a number and
-        # collide with the UNIQUE ticket_no constraint.
+        # MAX(id), not COUNT(*): deleted tickets must never get their
+        # number back, or the UNIQUE ticket_no constraint blows up.
         row = self.fetch_one(
             "SELECT COALESCE(MAX(id), 0) AS n FROM grievances")
         return f"SIT-{1000 + row['n']:04d}"
@@ -446,7 +446,7 @@ class DB:
                WHERE ticket_no = ?""",
             (new_status, change_time, ticket_no))
 
-        # link to previous hash so tampering breaks the whole chain
+        # each change links to the last hash, so editing one breaks the whole chain
         self.append_audit(ticket_no, old_status, new_status,
                           changed_by, change_time)
         return change_time
@@ -472,7 +472,7 @@ class DB:
         return True, (
             f"{len(rows)} entries verified. Chain hash: {prev[:16]}...")
 
-    # 2.8 meeting slots
+    # 1:1 counselling slots
     def add_slot(self, department, slot_date, time_slot, purpose):
         self.run(
             """INSERT INTO meeting_slots
@@ -491,7 +491,7 @@ class DB:
         return self.fetch(
             "SELECT * FROM meeting_slots ORDER BY slot_date ASC, time_slot ASC")
 
-    # 2.9 academic deadlines
+    # academic deadlines
     def add_deadline(self, title, department, due_date, description, status):
         self.run(
             """INSERT INTO academic_deadlines
@@ -518,7 +518,7 @@ class DB:
         self.run("DELETE FROM academic_deadlines WHERE id = ?",
                  (deadline_id,))
 
-    # 2.9b notices (parent / public announcements)
+    # notices - announcements parents can see
     def add_notice(self, title, body, department, visible=1,
                    created_by="SIT Admin"):
         self.run(
@@ -545,7 +545,7 @@ class DB:
     def delete_notice(self, notice_id):
         self.run("DELETE FROM notices WHERE id = ?", (notice_id,))
 
-    # 2.9c editable page content (Parent tab, staff-managed)
+    # parent page text, editable by staff
     def set_content(self, key, value):
         self.run(
             """INSERT INTO site_content (key, value) VALUES (?, ?)
@@ -558,7 +558,7 @@ class DB:
             "SELECT value FROM site_content WHERE key = ?", (key,))
         return row["value"] if row else None
 
-    # 2.10 seed data (one-time, guarded by app_meta)
+    # one-time demo seed (guarded by app_meta)
     def seed_demo_data(self):
         if self.fetch_one("SELECT value FROM app_meta WHERE key='seeded'"):
             return
@@ -737,7 +737,7 @@ class DB:
             (self.now_iso(),))
 
 # =====================================================================
-# SECTION 3: AUTHENTICATION HELPERS
+# SECTION 3: AUTH HELPERS
 # =====================================================================
 def hash_password(password, salt):
     return hashlib.pbkdf2_hmac(
@@ -849,7 +849,7 @@ def compute_audit_hash(prev_hash, ticket_no, new_status, changed_by, change_time
 
 
 def make_token(db, username):
-    # fresh UUID salt every time = tokens can't be traced back or matched
+    # fresh uuid each time, so tokens can't be traced back or matched
     raw = f"{username}|{db.now_iso()}|{uuid.uuid4()}"
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
@@ -1176,7 +1176,7 @@ def workload_text(deadline_date, today):
 
 
 def deadline_progress(deadline_date, today):
-    # linear ramp over a 90-day window
+    # ramps 0..1 across a 90-day window
     days = (deadline_date - today).days
     if days <= 0:
         return 1.0
@@ -1893,7 +1893,7 @@ def main():
     render_footer()
 
 
-# Double-click ('python app.py') -> relaunch through the streamlit launcher
+# double-clicking app.py re-opens it through the streamlit launcher
 if __name__ == "__main__":
     if st.runtime.exists():
         main()
